@@ -21,7 +21,7 @@ before_install:
 - echo -e "machine github.com\n  login $APIKEY" >> ~/.netrc
 - OS=$(if [[ "$TRAVIS_OS_NAME" = "osx" ]]; then echo "MacOSX"; else echo "Linux";
   fi)
-- wget "https://repo.continuum.io/miniconda/Miniconda-latest-$OS-x86_64.sh" -O miniconda.sh
+- wget "https://repo.continuum.io/miniconda/Miniconda3-latest-$OS-x86_64.sh" -O miniconda.sh
 - chmod +x miniconda.sh
 - if [ "$OS" = "Linux" ]; then ./miniconda.sh -b  -p /home/travis/miniconda; fi
 - if [ "$OS" = "MacOSX" ]; then ./miniconda.sh -b  -p /Users/travis/miniconda; fi
