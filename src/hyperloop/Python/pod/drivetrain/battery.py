@@ -197,8 +197,6 @@ class Battery(Component):
             `VecWrapper` containing residuals
 
         """
-        #print(params['des_power'])
-        #print(params['des_current'])
 
         # check representation invariant
         self._check_rep(params, unknowns, resids)
@@ -210,97 +208,42 @@ class Battery(Component):
 
         cap_discharge = self._calculate_total_discharge(
             params['time_of_flight'], params['des_current'])
-        # print((params['q_n'] * (1 - params['q_l'])))
-        # print cap_discharge
         n_parallel = cap_discharge / (params['q_n'] * (1 - params['q_l']))
-        # print('usaable cap %f ' % (params['q_n'] * (1 - params['q_l'])))
-        # print('cap dis %f' % cap_discharge)
-        # print(n_parallel)
         single_bat_current = params['des_current'] / n_parallel
-        # print('single bat cur %f' % single_bat_current)
-        # single_bat_current = 7
-        # single_bat_current = 7
-        # n_parallel = -params['des_current'] / single_bat_current
-        # single_bat_current = 13
         single_bat_discharge = self._calculate_total_discharge(
             params['des_time'], single_bat_current)
 
-        # # calculate general battery performance curve paramaters
-        # # TODO calculate performance curve parameters from Panasonic 18650
-        # # battery, currently using parameters from SUGAR paper
-        #
-        # # voltage drop over exponential zone
-        # # a = params['params['e_full']'] - params['e_exp']
-        # a = 0.144
-        # # discharge of single cell from full to end of exponential zone
-        # q_exp = self._calculate_total_discharge(
-        #     params['t_exp'], params['des_current']) / n_parallel
-        #
-        # # time constant of the exponential zone
-        # # b = 3 / q_exp
-        # b = 2.3077
-
-        # discharge over the nominal zone
-        # q_nom = self._calculate_total_discharge(
-        #     params['t_nom'], params['des_current']) / n_parallel
-
-        # # polarization voltage
-        # # k = (params['params['e_full']'] - params['e_nom'] + a * (np.exp(-b * q_nom) - 1)) * (params['q_n'] - q_nom)
-        # k = 0.01875
-        #
-        # # no load constant voltage of battery
-        # # k = polarization voltage, params['r'] = resistance,
-        # # e_0 = params['params['e_full']'] + k + params['r'] * single_bat_current - a
-        # e_0 = 1.2848
-        #
-        # # general voltage performance curve
-        # v_batt = e_0 - k * (params['q_n'] / (
-        #     params['q_n'] - single_bat_discharge)) + a * np.exp(
-        #         -b * single_bat_discharge) - params['r'] * single_bat_current
-
-        # single battery power at design power point
-
+        # fit spline to discharge curve for Panasonic 18650 battery
         dir = os.path.dirname(__file__)
         filename = os.path.join(dir, '18650.csv')
         data = np.loadtxt(filename, dtype='float', delimiter=',').transpose()
 
         func = scipy.interpolate.UnivariateSpline(data[0], data[1])
-        # print single_bat_discharge
         v_batt = func(single_bat_discharge * 1000)
 
         p_bat = v_batt * single_bat_current
-        # print(v_batt)
-        # print('p_bat %f' % p_bat)
 
         energy_cap = scipy.integrate.quad(func, 0, single_bat_discharge * 1000)[0] / 1000
-        #print('energy cap %f' % energy_cap)
 
         # total number of battery cells
         n_cells = params['des_power'] / p_bat
-        #print('n_cells %f' % n_cells)
         n_cells = np.ceil(n_cells)
         n_parallel = np.ceil(n_parallel)
         n_series = np.ceil(n_cells / n_parallel)
 
-        # assert n_cells >= n_parallel
-
         unknowns['n_cells'] = n_cells
 
-        # calculate volume of cells accounting for hexagonal packing efficiency of 0.9069 and convert from mm^3 to cm^3
-        # unknowns['battery_volume'] =(n_cells * (
-        #     params['cell_height'] * np.pi * np.power(params['cell_diameter'] /
-        #                                              2, 2)) / 0.9069 / 1000) / 3.7
-
-        # calculate mass of cells and convert to kg
-        # including rough approx of li-ion density
-        # TODO dev real model
-        # unknowns['battery_mass'] = params['cell_mass'] * n_cells / 1000 / 5
+        # calculate mass using panasonic 18650B gravimetric density
         unknowns['battery_mass'] = energy_cap * n_cells / 265
+        
+        # calculate volume of cells accounting for hexagonal packing efficiency of 0.9069 and convert from mm^3 to cm^3
+        # using volumetric density for panasonic 18650B
         unknowns['battery_volume'] = energy_cap * n_cells / 730 * 1000 / 0.9069
 
         # calculate output voltage of battery in the nominal zone
         unknowns['output_voltage'] = n_series * params['e_nom']
 
+        # calculate cost using sample unit cost from online distributor
         unknowns['battery_cost'] = n_cells * 12.95
 
         unknowns['battery_length'] = unknowns['battery_volume'] / params['battery_cross_section_area']
